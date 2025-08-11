@@ -1,0 +1,30 @@
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: webapp-config
+#   namespace: fp
+# data:
+#   BG_S3_BUCKET: "clo835images"
+#   IMAGE_URL: "https://clo835images.s3.amazonaws.com/window.png"
+#   GROUP_NAME: "Group 5"
+#   GROUP_SLOGAN: "We Build Cloud Technology In ClO835"
+
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: fp
+data:
+  # S3 object to download (private bucket)
+  BG_BUCKET: clo835images
+  BG_KEY: wings.jpg
+
+  # Web header text
+  GROUP_NAME: "Group-5"
+  GROUP_SLOGAN: "We Build Cloud Technology In ClO835"
+
+  # DB service discovery (points to the K8s Service below)
+  DBHOST: mysql
+  DBPORT: "3306"
+  DATABASE: employees

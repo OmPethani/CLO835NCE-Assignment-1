@@ -1,10 +1,65 @@
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: mysql
+#   namespace: fp
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: mysql
+#   template:
+#     metadata:
+#       labels:
+#         app: mysql
+#     spec:
+#       serviceAccountName: clo835-sa
+#       imagePullSecrets:
+#         - name: regcred
+#       securityContext:
+#           fsGroup: 999
+#           fsGroupChangePolicy: "OnRootMismatch"
+#       containers:
+#         - name: mysql
+#           image: 062797229547.dkr.ecr.us-east-1.amazonaws.com/mysql:latest
+#           ports:
+#             - containerPort: 3306
+#           envFrom:
+#             - secretRef:
+#                 name: mysql-secret
+#             - configMapRef:
+#                 name: app-config
+#           env:
+#             - name: MYSQL_ROOT_PASSWORD
+#               valueFrom:
+#                 secretKeyRef:
+#                   name: mysql-secret
+#                   key: DBPWD
+#             - name: MYSQL_DATABASE
+#               valueFrom:
+#                 configMapKeyRef:
+#                   name: app-config
+#                   key: DATABASE
+#           volumeMounts:
+#             - name: mysql-data
+#               mountPath: /var/lib/mysql
+#           securityContext:
+#               runAsUser: 999
+#               runAsGroup: 999
+#               allowPrivilegeEscalation: false
+#       volumes:
+#         - name: mysql-data
+#           persistentVolumeClaim:
+#             claimName: mysql-pvc
+
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mysql-deploy
-  namespace: mysql-ns
+  name: mysql
+  namespace: fp
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: mysql
@@ -13,14 +68,60 @@ spec:
       labels:
         app: mysql
     spec:
-      containers:
-        - name: mysql-container
-          image: 062797229547.dkr.ecr.us-east-1.amazonaws.com/mysql:latest
-          ports:
-            - containerPort: 3306
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              value: "root"
+      serviceAccountName: clo835-sa
       imagePullSecrets:
         - name: regcred
 
+      # Pod-level security context (owning group for mounted volume)
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
+
+      # ---- OPTION B: wipe any leftover files in the data dir (DANGEROUS: deletes data) ----
+      initContainers:
+        - name: wipe-mysql-dir
+          image: public.ecr.aws/docker/library/busybox:latest
+          securityContext:
+            runAsUser: 0
+          command: ["/bin/sh","-lc"]
+          args:
+            - >
+              echo "Wiping /var/lib/mysql (if any) ..." &&
+              rm -rf /var/lib/mysql/* /var/lib/mysql/.* 2>/dev/null || true
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+
+      containers:
+        - name: mysql
+          image: 062797229547.dkr.ecr.us-east-1.amazonaws.com/mysql:latest
+          ports:
+            - containerPort: 3306
+          envFrom:
+            - secretRef:
+                name: mysql-secret
+            - configMapRef:
+                name: app-config
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DBPWD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DATABASE
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-pvc
