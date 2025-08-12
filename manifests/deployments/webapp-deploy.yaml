@@ -1,32 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: webapp-deploy
-  namespace: webapp-ns
-  labels:
-    app: employees
+  name: webapp
+  namespace: fp
 spec:
-  replicas: 3
+  replicas: 1
   selector:
-    matchLabels:
-      app: employees
+    matchLabels: { app: webapp }
   template:
     metadata:
-      labels:
-        app: employees
+      labels: { app: webapp }
     spec:
-      containers:
-        - name: web-container
-          image: 062797229547.dkr.ecr.us-east-1.amazonaws.com/webapp:v2
-          ports:
-            - containerPort: 8080
-          env: 
-            - name: DBHOST
-              value: "mysql"
-            - name: DBPWD
-              value: "root"
-            - name: APP_COLOR
-              value: "pink"
+      serviceAccountName: clo835-sa
       imagePullSecrets:
         - name: regcred
 
+      # 1) Shared volume where the image will be placed
+      volumes:
+        - name: static-vol
+          emptyDir: {}
+
+      # 2) Init container downloads S3 object to the shared volume
+      initContainers:
+        - name: fetch-bg
+          image: public.ecr.aws/aws-cli/aws-cli:latest
+          envFrom:
+            - secretRef: { name: aws-secret }      # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
+            - configMapRef: { name: app-config } # BG_BUCKET, BG_KEY (or a single BG_IMAGE like s3://bucket/key)
+          command: ["/bin/sh","-lc"]
+          args:
+            # If you store bucket and key separately in ConfigMap
+            - |
+              set -e
+              echo "Downloading s3://${BG_BUCKET}/${BG_KEY} ..."
+              aws s3 cp "s3://${BG_BUCKET}/${BG_KEY}" /static/bg.jpg
+          volumeMounts:
+            - name: static-vol
+              mountPath: /static
+
+      containers:
+        - name: webapp
+          image: 062797229547.dkr.ecr.us-east-1.amazonaws.com/webapp:latest
+          ports:
+            - containerPort: 81
+          envFrom:
+            - secretRef: { name: mysql-secret }
+            - secretRef: { name: aws-secret }       # boto3 path also works if you use it later
+            - configMapRef: { name: app-config }  # also has GROUP_NAME/SLOGAN etc.
+          volumeMounts:
+            - name: static-vol
+              mountPath: /app/static   # Flask will serve /app/static/bg.jpg
